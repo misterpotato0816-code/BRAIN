@@ -1,0 +1,94 @@
+# BRAIN License Agreement (Japanese Original)
+
+**本ライセンスは、日本語版（LICENSE.ja.md）を正文とし、本英語版は参考訳とします。両者に相違がある場合、日本語版が優先します。**
+
+---
+
+## 1. Copyright Notice
+
+Copyright (c) 2026 Mostly Works. All rights reserved.
+
+Contact: brainbucket000@gmail.com
+
+---
+
+## 2. Position of This Software
+
+BRAIN is published as Source Available / Proprietary software. It is **not** Open Source Software. No MIT, Apache, GPL, or other open-source license applies.
+
+---
+
+## 3. Permissions
+
+The following acts are permitted free of charge, for personal and commercial use alike:
+
+1. **Use** — Running and using BRAIN. No limit on the number of machines.
+2. **Inspection and verification** — Reading, analyzing, and security-auditing the source code. Because BRAIN may modify the configuration files of AI coding tools you use, you are expressly permitted to inspect what it does before installing it.
+3. **Private modification** — Modifying the source code solely for your own use. Distributing modified versions to third parties is prohibited.
+4. **Private copying** — Copying for your own use, such as backups.
+
+---
+
+## 4. Prohibited Acts
+
+Without the prior written permission of Mostly Works, the following are prohibited:
+
+1. **Redistribution** — Distributing, sharing, or mirror-publishing all or part of BRAIN to third parties, in whole or in part.
+2. **Distribution of modified versions** — Distributing forks, modified versions, or derivative versions to third parties.
+3. **Sale or resale** — Selling, reselling, or renting out BRAIN itself.
+4. **Incorporation into paid products or services** — Incorporating BRAIN into paid products or paid services for third parties and providing it as part of them.
+5. **Sublicensing** — Re-licensing usage rights of BRAIN to third parties.
+6. **Removal of rights notices** — Removing or altering the copyright, LICENSE, or other rights notices of Mostly Works.
+
+---
+
+## 5. Public GitHub Repository
+
+This license assumes BRAIN is published in a public GitHub repository. Viewing, cloning, and forking performed as ordinary GitHub features are not treated as violations of the redistribution prohibition, to the extent necessary under GitHub's Terms of Service. Nothing in this section overrides GitHub's Terms of Service.
+
+The following remain prohibited: redistribution outside GitHub, republishing as your own work, unauthorized distribution of forks, providing modified versions to third parties, and resale.
+
+---
+
+## 6. No Warranty
+
+BRAIN IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OPERATION, DATA PRESERVATION, OR FUTURE COMPATIBILITY WITH AI TOOLS.
+
+---
+
+## 7. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, MOSTLY WORKS SHALL NOT BE LIABLE FOR DAMAGES ARISING FROM THE USE OR INABILITY TO USE BRAIN, INCLUDING BUT NOT LIMITED TO DATA LOSS, CONFIGURATION DAMAGE, EFFECTS ON AI TOOL CONFIGURATIONS, BUSINESS INTERRUPTION, LOST PROFITS, AND OTHER INDIRECT DAMAGES. NOTHING IN THIS SECTION LIMITS LIABILITY THAT CANNOT BE LIMITED UNDER APPLICABLE LAW.
+
+---
+
+## 8. Configuration Changes
+
+BRAIN may modify configuration files of external AI coding tools (for example: Claude, Codex, OpenCode, Cursor, GitHub Copilot CLI, Gemini CLI). Inspect the contents yourself before installing, and use BRAIN at your own responsibility.
+
+---
+
+## 9. Termination
+
+If you violate the terms of this license, the permissions granted under this license terminate.
+
+---
+
+## 10. Governing Law
+
+This license is governed by the laws of Japan. Any dispute arising out of or in connection with this license shall be subject to the jurisdiction of the courts of Japan.
+
+---
+
+## 11. Individual Permission
+
+To request redistribution, commercial redistribution, product incorporation, distribution of modified versions, or any other use outside these terms, please contact us individually.
+
+Contact: brainbucket000@gmail.com
+
+---
+
+## 12. License Name for README
+
+License: Proprietary / Source Available
+Free to use, source available, redistribution prohibited.

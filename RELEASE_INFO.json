@@ -1,0 +1,16 @@
+{
+  "product": "BRAIN",
+  "version": "0.2.0",
+  "build_date": "2026-09-04",
+  "source_phase": "Revolution Phase 1-8.2 Final Packaging",
+  "test_count": 15,
+  "test_result": "PASS (dist standalone run)",
+  "canary_result": "PASS",
+  "git_commit": null,
+  "git_status": "not_a_git_repository (no commit to record; hash never fabricated)",
+  "license": "Proprietary / Source Available",
+  "copyright_holder": "Mostly Works",
+  "contact": "brainbucket000@gmail.com",
+  "verification_summary": "All 6 adapters Spec-validated at provider level; live-verified capabilities: Cursor Install/Status/Uninstall/Restore + SessionStart/ContextInjection/PostToolUse/SessionEnd, Copilot Install/Status/Uninstall/Restore (model path POLICY BLOCKED), Gemini Install/Status/Uninstall/Restore + SessionStart/ContextInjection/AfterTool; no adapter claims a full live loop",
+  "clean_build_method": "allowlist copy with per-file hash verification"
+}
