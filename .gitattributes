@@ -1,0 +1,2 @@
+# Preserve release bytes on every OS: MANIFEST.txt hashes exact file contents.
+* -text

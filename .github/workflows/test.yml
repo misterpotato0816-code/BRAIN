@@ -1,0 +1,39 @@
+name: BRAIN Windows tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check required runtimes
+        shell: pwsh
+        run: |
+          if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 is required.' }
+          Get-Command pwsh.exe, node.exe -ErrorAction Stop | Select-Object Name, Source
+      - name: Verify source manifest
+        shell: pwsh
+        run: |
+          foreach ($line in Get-Content -LiteralPath MANIFEST.txt) {
+            if ($line -notmatch '^([0-9A-F]{64})  (\d+)  (.+)$') { throw 'Invalid manifest entry.' }
+            $expectedHash = $Matches[1]
+            $expectedLength = [long]$Matches[2]
+            $file = Get-Item -LiteralPath $Matches[3] -ErrorAction Stop
+            if ($file.Length -ne $expectedLength -or (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ne $expectedHash) {
+              throw "Manifest mismatch: $($file.Name)"
+            }
+          }
+      - name: Run all sandboxed tests
+        shell: pwsh
+        run: pwsh -NoProfile -File .\tests\run-all.ps1

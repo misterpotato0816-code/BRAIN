@@ -114,6 +114,7 @@ Codex/Claude の hook 導入済みで、作業ディレクトリが trusted root
 収集動作：
 
 - 記録は収集前に検証されます。
+- 不正な outbox 記録はパスを報告して除外し、正常な他の記録は収集を継続します。保存済み Raw 記録も現在の検証条件に違反する場合は再生成する context から除外しますが、Raw 自体の変更・削除はしません。
 - Raw 記録は `store/raw/<project-id>/<sha256>.md` へバイト単位で保存されます。
 - 既存 Raw 記録の上書き・削除はしません。
 - 同一内容は SHA-256 照合後に何もしません（no-op）。
@@ -122,6 +123,8 @@ Codex/Claude の hook 導入済みで、作業ディレクトリが trusted root
 - ローカル単一 writer lock が registry・raw・context の同時更新を防ぎます。
 - Markdown 内容を実行することはありません。
 - 秘密鍵ブロック・bearer 認証ヘッダ・明らかな secret 代入を含む記録は拒否されます。credential・token・cookie・秘密鍵・個人データを作業記録に入れないでください。
+
+セッション開始時に現在の検証条件で context を再生成します。再生成に失敗した場合は履歴の注入を見送り、AI セッションは継続します。保留中の記録は、その記録自体の検証・収集が成功した場合だけ完了扱いになります。hook 内部では `sync -RequiredRecordPath <path>` を使い、指定記録が不正・欠落の場合は正常な他の記録を同期した後に失敗を報告します。
 
 Context 上限の既定は最新10件・32 KiB です。必要な場合だけ変更します：
 
@@ -194,6 +197,8 @@ BRAIN Core は AI 固有知識を持ちません。各 AI は `integrations/prov
 ```
 
 `Integrations` は全 Integration の有効 flag・設定 path・event・検証状態を列挙します。Provider 単位は `Spec-validated`（公開仕様＋sandbox simulation 準拠）で、live 証明済み Capability は各 Integration 節に列挙します。完全 live loop 主張の adapter はありません。`Enable`／`Disable` は `config/integrations.json` へ保存します（欠落＝全 enabled のため既存導入は継続動作）。`Install`・`Update`・`Repair` は無効 Integration を skip し設定に触れません。`Uninstall`・`Backup`・`Restore` は無効でも処理します（BRAIN 自分の除去と設定 backup は安全な掃除であり新規配線ではないため）。`Status` は有効 flag を報告します。未知 id は明確エラー（`Unknown integration: <id>. Known integrations: ...`）で他に波及しません。旧 `integrations/install-hooks.ps1` ラッパは Codex/Claude の Install 専用で2者のみ報告します — それ以外は `brain-setup.ps1` を使います。
+
+旧 `install-hooks.ps1` は既定で Codex/Claude の2者だけを導入します。任意の `-Integration` は `codex`／`claude` のみ受け付け、`-ConfigPath` の指定には対象の明示が必要です。省略した設定パスは `brain-setup.ps1` が解決するため、`-SandboxDir` だけを指定した場合も試験先へ配置します。
 
 ## OpenCode（Desktop / CLI）
 

@@ -130,6 +130,7 @@ Place work records based on `templates/work-record.md` directly in `.brain/outbo
 Collection behavior:
 
 - Records are validated before collection.
+- Invalid outbox records are reported by path and skipped; valid sibling records still collect. Raw records that fail current validation are excluded from regenerated context, without modifying or deleting the raw files.
 - Raw records are stored byte-for-byte under `store/raw/<project-id>/<sha256>.md`.
 - An existing raw record is never overwritten or deleted.
 - Duplicate content is a no-op after its SHA-256 is verified.
@@ -138,6 +139,13 @@ Collection behavior:
 - A local single-writer lock prevents concurrent registry, raw, and context updates.
 - Markdown content is never executed.
 - Records containing private-key blocks, bearer authorization headers, or obvious secret assignments are rejected. Do not place credentials, tokens, cookies, private keys, or personal data in work records.
+
+Session start regenerates context under the current validator. If regeneration
+fails, BRAIN skips context injection and lets the AI session continue. A pending
+record clears only after that specific record is validated and collected;
+unrelated invalid files cannot falsely mark it complete. The internal hook path
+uses `sync -RequiredRecordPath <path>` for this check. If that file is missing or
+rejected, valid sibling records still sync but the command reports failure.
 
 Context limits default to the newest 10 records and 32 KiB. Override them only when needed:
 
@@ -232,6 +240,11 @@ are rejected with a clear
 other providers. The legacy `integrations/install-hooks.ps1` wrapper only
 supports Codex/Claude Install and reports only those two — use
 `brain-setup.ps1` for everything else.
+
+The legacy wrapper defaults to those two integrations only. Its optional
+`-Integration` accepts `codex` or `claude`; a `-ConfigPath` requires choosing one.
+Omitted config paths are resolved by `brain-setup.ps1`, including when only
+`-SandboxDir` is supplied.
 
 ## OpenCode (Desktop / CLI)
 

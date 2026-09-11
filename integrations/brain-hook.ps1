@@ -310,13 +310,29 @@ function Write-HookJson {
 }
 
 function Invoke-BrainSync {
-    param([Parameter(Mandatory = $true)][object]$Project)
+    param(
+        [Parameter(Mandatory = $true)][object]$Project,
+        [string]$RequiredRecordPath = ''
+    )
 
     $brainScript = Join-Path $BrainRoot 'brain.ps1'
     if (-not (Test-Path -LiteralPath $brainScript -PathType Leaf)) {
         throw "BRAIN script is missing: $brainScript"
     }
-    & $brainScript sync -ProjectPath $Project.path | Out-Null
+    # A successful best-effort sync alone is not evidence that this session's
+    # pending record was accepted: another file can be valid while it is not.
+    # Suppress warnings here to keep the provider's stdout JSON contract intact.
+    & $brainScript sync -ProjectPath $Project.path -RequiredRecordPath $RequiredRecordPath 3>$null | Out-Null
+}
+
+function Complete-PendingRecord {
+    param([Parameter(Mandatory = $true)][object]$State)
+
+    $State.dirty = $false
+    $State.request_count = 0
+    $State.expected_record_path = ''
+    $State.task_id = ''
+    $State.updated_at = [DateTimeOffset]::Now.ToString('o')
 }
 
 function Invoke-BrainRegister {
@@ -568,18 +584,23 @@ try {
                 Write-State -Path $statePath -State $state
             }
 
-            $outbox = Join-Path $project.path '.brain\outbox'
             $contextPath = Join-Path $project.path '.brain\context.md'
-            $needsSync = (-not (Test-Path -LiteralPath $outbox -PathType Container)) -or
-                (-not (Test-Path -LiteralPath (Join-Path $project.path '.brain\project.json') -PathType Leaf)) -or
-                (-not (Test-Path -LiteralPath $contextPath -PathType Leaf))
-            if (-not $needsSync) {
-                $pending = @(Get-ChildItem -LiteralPath $outbox -File -Filter '*.md')
-                $needsSync = ($pending.Count -gt 0)
+            $expectedPath = [string]$state.expected_record_path
+            try {
+                # Always rebuild from validated raw records, including after an
+                # upgrade: an old context file may predate secret validation.
+                Invoke-BrainSync -Project $project -RequiredRecordPath $expectedPath
+                if (-not [string]::IsNullOrWhiteSpace($expectedPath)) {
+                    Complete-PendingRecord -State $state
+                    Write-State -Path $statePath -State $state
+                }
             }
-            if ($needsSync) {
-                try { Invoke-BrainSync -Project $project }
-                catch { Write-HookLog -Message ("SessionStart pending sync failed: " + $_.Exception.Message) }
+            catch {
+                Write-HookLog -Message ("SessionStart pending sync failed: " + $_.Exception.Message)
+                Write-LiveDiagnostic -Fields @{ phase = 'context'; event = $eventName; session_ref = $liveSessionRef; project_id = $project.id; injected = $false; reason = 'sync-failed' }
+                # Fail open for the AI session, but never inject an unvalidated
+                # pre-existing context or clear pending work after a failed sync.
+                exit 0
             }
 
             if (-not (Test-Path -LiteralPath $contextPath -PathType Leaf)) {
@@ -635,10 +656,8 @@ $context
             if (-not [string]::IsNullOrWhiteSpace($expectedPath) -and
                 (Test-Path -LiteralPath $expectedPath -PathType Leaf)) {
                 try {
-                    Invoke-BrainSync -Project $project
-                    $state.dirty = $false
-                    $state.expected_record_path = ''
-                    $state.task_id = ''
+                    Invoke-BrainSync -Project $project -RequiredRecordPath $expectedPath
+                    Complete-PendingRecord -State $state
                     Write-State -Path $statePath -State $state
                     $sessionEndSync = 'ok'
                 }
@@ -676,7 +695,7 @@ $context
                             $otherProject = Get-RegisteredProject -WorkingDirectory ([string]$other.project_path)
                             if ($null -ne $otherProject -and
                                 [string]::Equals($otherProject.id, [string]$other.project_id, [StringComparison]::OrdinalIgnoreCase)) {
-                                Invoke-BrainSync -Project $otherProject
+                                Invoke-BrainSync -Project $otherProject -RequiredRecordPath $otherExpectedPath
                                 $otherDirty = $false
                             }
                         }
@@ -710,12 +729,8 @@ $context
         if (-not [string]::IsNullOrWhiteSpace($expectedRecordPath) -and
             (Test-Path -LiteralPath $expectedRecordPath -PathType Leaf)) {
             try {
-                Invoke-BrainSync -Project $project
-                $state.dirty = $false
-                $state.request_count = 0
-                $state.expected_record_path = ''
-                $state.task_id = ''
-                $state.updated_at = [DateTimeOffset]::Now.ToString('o')
+                Invoke-BrainSync -Project $project -RequiredRecordPath $expectedRecordPath
+                Complete-PendingRecord -State $state
                 Write-State -Path $statePath -State $state
                 Write-LiveDiagnostic -Fields @{ phase = 'stop-sync'; event = $eventName; session_ref = $liveSessionRef; project_id = $project.id; sync = 'ok'; record_requested = $false }
                 exit 0
