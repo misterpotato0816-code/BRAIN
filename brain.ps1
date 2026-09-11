@@ -15,6 +15,10 @@ param(
     [ValidateRange(4096, 1048576)]
     [int]$MaxContextBytes = 32768,
 
+    # Hook callers use this to require a particular outbox record to be
+    # validated and collected in this sync, even when other records are skipped.
+    [string]$RequiredRecordPath,
+
     [switch]$Version
 )
 
@@ -27,6 +31,9 @@ if ([string]::IsNullOrWhiteSpace($Command)) {
 }
 if ($Command -ne 'version' -and [string]::IsNullOrWhiteSpace($ProjectPath)) {
     throw "-ProjectPath is required for the '$Command' command."
+}
+if (-not [string]::IsNullOrWhiteSpace($RequiredRecordPath) -and $Command -ne 'sync') {
+    throw '-RequiredRecordPath is only supported by sync.'
 }
 
 # Deliberately NOT trimmed here. Trimming a drive-root script location ('E:\') would produce
@@ -119,6 +126,9 @@ function New-DefaultProjectId {
     $slug = ($leaf.ToLowerInvariant() -replace '[^a-z0-9._-]+', '-') -replace '^-+|-+$', ''
     if ([string]::IsNullOrWhiteSpace($slug)) {
         $slug = 'project'
+    }
+    elseif ($slug -notmatch '^[a-z0-9]') {
+        $slug = 'project-' + $slug
     }
     $bytes = [Text.Encoding]::UTF8.GetBytes($CanonicalPath.ToLowerInvariant())
     $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
@@ -249,13 +259,17 @@ function Read-WorkRecord {
     )
 
     Assert-NormalPathItem -Path $Path -Description 'Work record'
-    $text = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    # Validate the exact bytes that collect will persist. An editor changing
+    # outbox after validation must not smuggle different, unchecked bytes in.
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $text = [Text.Encoding]::UTF8.GetString($bytes)
+    if ($text.Length -gt 0 -and $text[0] -eq [char]0xFEFF) { $text = $text.Substring(1) }
     $normalized = $text -replace "`r`n", "`n" -replace "`r", "`n"
 
     $blockedSecretPatterns = @(
         '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----',
-        '(?im)^\s*Authorization\s*:\s*Bearer\s+\S+',
-        '(?im)^\s*(api[_-]?key|access[_-]?token|secret[_-]?key)\s*[:=]\s*[^\s<]{12,}'
+        '(?i)(?<![a-z0-9_])Authorization["'']?\s*:\s*["'']?Bearer\s+[^\s<"''`]+',
+        '(?i)(?<![a-z0-9_])(api[_-]?key|access[_-]?token|secret[_-]?key)["'']?\s*[:=]\s*["'']?[^\s<"''`]{12,}'
     )
     foreach ($pattern in $blockedSecretPatterns) {
         if ($normalized -match $pattern) {
@@ -272,11 +286,11 @@ function Read-WorkRecord {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         $match = [regex]::Match($line, '^([a-z_]+):\s*"?([^"\r\n]*)"?\s*$')
         if (-not $match.Success) {
-            throw "Unsupported front-matter line in ${Path}: $line"
+            throw "Unsupported front-matter line in $Path"
         }
         $key = $match.Groups[1].Value
         if ($metadata.ContainsKey($key)) {
-            throw "Duplicate front-matter key in ${Path}: $key"
+            throw "Duplicate front-matter key in $Path"
         }
         $metadata[$key] = $match.Groups[2].Value.Trim()
     }
@@ -286,7 +300,7 @@ function Read-WorkRecord {
         }
     }
     if ([string]$metadata.brain_record_version -ne $FormatVersion) {
-        throw "Unsupported brain_record_version in ${Path}: $($metadata.brain_record_version)"
+        throw "Unsupported brain_record_version in $Path"
     }
     if ([string]$metadata.project_id -ne $ExpectedProjectId) {
         throw "Work record project_id does not match the registered project in $Path"
@@ -312,7 +326,7 @@ function Read-WorkRecord {
             $heading = $Matches[1]
             if ($nextSectionIndex -ge $RequiredSections.Count -or $heading -ne $RequiredSections[$nextSectionIndex]) {
                 $expected = if ($nextSectionIndex -lt $RequiredSections.Count) { $RequiredSections[$nextSectionIndex] } else { '<no additional section>' }
-                throw "Unexpected or out-of-order heading '$heading' in ${Path}; expected '$expected'"
+                throw "Unexpected or out-of-order heading in ${Path}; expected '$expected'"
             }
             $sections[$heading] = [Collections.Generic.List[string]]::new()
             $currentSection = $heading
@@ -324,7 +338,7 @@ function Read-WorkRecord {
             throw "Content appears before the first required heading in $Path"
         }
         if ($line -notmatch '^- \[(Observed|Suspected|Verified)\] \S.*$') {
-            throw "Every section entry must be a labeled single-line bullet in ${Path}: $line"
+            throw "Every section entry must be a labeled single-line bullet in $Path"
         }
         $sections[$currentSection].Add($line)
     }
@@ -339,6 +353,7 @@ function Read-WorkRecord {
 
     return [pscustomobject]@{
         Text = $text
+        Bytes = $bytes
         TaskId = [string]$metadata.task_id
         CompletedAt = $completedAt
         Sections = $sections
@@ -346,7 +361,12 @@ function Read-WorkRecord {
 }
 
 function Collect-Records {
-    param([Parameter(Mandatory = $true)][object]$Project)
+    param(
+        [Parameter(Mandatory = $true)][object]$Project,
+        [ref]$RequiredRecordAccepted
+    )
+
+    if ($null -ne $RequiredRecordAccepted) { $RequiredRecordAccepted.Value = $false }
 
     $paths = Get-ProjectBrainPaths -Project $Project
     if (-not (Test-Path -LiteralPath $paths.ProjectFile -PathType Leaf) -or -not (Test-Path -LiteralPath $paths.OutboxDirectory -PathType Container)) {
@@ -363,10 +383,20 @@ function Collect-Records {
 
     $added = 0
     $duplicates = 0
+    $rejected = 0
     $files = @(Get-ChildItem -LiteralPath $paths.OutboxDirectory -File -Filter '*.md' | Sort-Object Name)
     foreach ($file in $files) {
-        $null = Read-WorkRecord -Path $file.FullName -ExpectedProjectId $Project.id
-        $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        try {
+            $record = Read-WorkRecord -Path $file.FullName -ExpectedProjectId $Project.id
+        }
+        catch {
+            # Never echo record contents or raw exception messages into hooks.
+            # Leave rejected outbox files in place so their owner can repair them.
+            $rejected++
+            Write-Warning "OUTBOX_RECORD_REJECTED path=$($file.FullName); validation/read failed; file left unchanged."
+            continue
+        }
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]$record.Bytes)).ToLowerInvariant()
         $destination = Join-Path $projectRawDirectory ($hash + '.md')
         if (Test-Path -LiteralPath $destination -PathType Leaf) {
             Assert-NormalPathItem -Path $destination -Description 'Existing raw record'
@@ -375,12 +405,16 @@ function Collect-Records {
                 throw "Immutable raw record hash mismatch: $destination"
             }
             $duplicates++
+            if ($null -ne $RequiredRecordAccepted -and -not [string]::IsNullOrWhiteSpace($RequiredRecordPath) -and
+                (Test-BrainPathEqual -Left $file.FullName -Right $RequiredRecordPath)) {
+                $RequiredRecordAccepted.Value = $true
+            }
             continue
         }
 
         $temporary = Join-Path $projectRawDirectory ('.brain-raw-tmp-' + [guid]::NewGuid().ToString('N'))
         try {
-            Copy-Item -LiteralPath $file.FullName -Destination $temporary
+            [IO.File]::WriteAllBytes($temporary, [byte[]]$record.Bytes)
             $copiedHash = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($copiedHash -ne $hash) {
                 throw "Raw copy verification failed for: $($file.FullName)"
@@ -393,8 +427,12 @@ function Collect-Records {
             }
         }
         $added++
+        if ($null -ne $RequiredRecordAccepted -and -not [string]::IsNullOrWhiteSpace($RequiredRecordPath) -and
+            (Test-BrainPathEqual -Left $file.FullName -Right $RequiredRecordPath)) {
+            $RequiredRecordAccepted.Value = $true
+        }
     }
-    Write-Output "COLLECTED id=$($Project.id) added=$added duplicates=$duplicates scanned=$($files.Count)"
+    Write-Output "COLLECTED id=$($Project.id) added=$added duplicates=$duplicates scanned=$($files.Count) rejected=$rejected"
 }
 
 function New-ContextContent {
@@ -426,7 +464,15 @@ Only Verified items backed by current evidence should be treated as previously c
     if (Test-Path -LiteralPath $projectRawDirectory -PathType Container) {
         Assert-NormalPathItem -Path $projectRawDirectory -Description 'BRAIN raw directory'
         foreach ($file in @(Get-ChildItem -LiteralPath $projectRawDirectory -File -Filter '*.md')) {
-            $record = Read-WorkRecord -Path $file.FullName -ExpectedProjectId $Project.id
+            try {
+                $record = Read-WorkRecord -Path $file.FullName -ExpectedProjectId $Project.id
+            }
+            catch {
+                # Older versions may already have accepted a now-rejected
+                # record. Rebuild safe context without mutating immutable raw.
+                Write-Warning "RAW_RECORD_EXCLUDED path=$($file.FullName); validation/read failed; raw left unchanged."
+                continue
+            }
             $records += [pscustomobject]@{
                 FileName = $file.Name
                 Record = $record
@@ -526,8 +572,12 @@ try {
         'sync' {
             $project = Get-RegisteredProject -Path $ProjectPath
             Initialize-Project -Project $project
-            Collect-Records -Project $project
+            $requiredRecordAccepted = $false
+            Collect-Records -Project $project -RequiredRecordAccepted ([ref]$requiredRecordAccepted)
             Write-Context -Project $project
+            if (-not [string]::IsNullOrWhiteSpace($RequiredRecordPath) -and -not $requiredRecordAccepted) {
+                throw 'Required outbox record was not validated and collected in this sync. Valid context was updated; pending work must remain open.'
+            }
         }
     }
 }

@@ -23,6 +23,7 @@
 // Every failure is fail-open: a BRAIN problem never blocks the session.
 
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 const BRAIN_ROOT = "__BRAIN_ROOT__";
 const BRAIN_HOOK = "__BRAIN_HOOK_PATH__";
@@ -194,8 +195,19 @@ export const BrainPlugin = async (ctx, deps) => {
         }
         const contextText = pendingContext.get(sessionID);
         if (contextText) {
+          // chat.message receives fully identified TextParts. OpenCode saves
+          // newly appended parts without assigning these fields afterwards.
+          const messageID = output && output.message && output.message.id;
+          if (typeof messageID !== "string" || !messageID || !Array.isArray(output.parts)) return;
+          output.parts.push({
+            id: "prt_" + randomUUID().replace(/-/g, ""),
+            sessionID,
+            messageID,
+            type: "text",
+            text: contextText,
+            synthetic: true,
+          });
           pendingContext.delete(sessionID);
-          output.parts.push({ type: "text", text: contextText });
         }
       } catch {
         // Fail open: never block message admission.

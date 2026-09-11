@@ -481,9 +481,10 @@ function New-BrainIntegrationHandler {
         # Command entries for the Copilot CLI hooks dialect: per-OS command
         # keys with a `timeoutSec` deadline. Only documented keys are emitted;
         # detection relies on the brain-hook.ps1 command substring.
+        # PowerShell needs the call operator to execute a quoted executable.
         $handler = [ordered]@{
             type = 'command'
-            powershell = '"' + $PowerShellPath + '" -NoProfile -NonInteractive -File "' + $BrainHookPath + '" -Provider ' + [string]$Definition.Name
+            powershell = '& "' + $PowerShellPath + '" -NoProfile -NonInteractive -File "' + $BrainHookPath + '" -Provider ' + [string]$Definition.Name
             timeoutSec = $Timeout
         }
         return $handler

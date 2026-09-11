@@ -1,16 +1,17 @@
 {
   "product": "BRAIN",
-  "version": "0.2.0",
-  "build_date": "2026-09-04",
-  "source_phase": "Revolution Phase 1-8.2 Final Packaging",
-  "test_count": 15,
-  "test_result": "PASS (dist standalone run)",
-  "canary_result": "PASS",
+  "version": "0.2.1",
+  "build_date": "2026-09-11",
+  "source_phase": "0.2.0 audit corrections",
+  "test_count": 18,
+  "test_result": "Run tests/run-all.ps1; commit-specific results are recorded by the BRAIN Windows tests workflow. A test pass is not a live AI-provider round trip.",
+  "canary_result": "Enforced before/after each test and across the full run; see commit-specific CI results.",
   "git_commit": null,
-  "git_status": "not_a_git_repository (no commit to record; hash never fabricated)",
+  "git_status": "Source revision is recorded in Git history; no self-referential commit hash is embedded.",
+  "base_git_commit": "2548b58745648d4879d85e85edb8b94d5789c707",
   "license": "Proprietary / Source Available",
   "copyright_holder": "Mostly Works",
   "contact": "brainbucket000@gmail.com",
-  "verification_summary": "All 6 adapters Spec-validated at provider level; live-verified capabilities: Cursor Install/Status/Uninstall/Restore + SessionStart/ContextInjection/PostToolUse/SessionEnd, Copilot Install/Status/Uninstall/Restore (model path POLICY BLOCKED), Gemini Install/Status/Uninstall/Restore + SessionStart/ContextInjection/AfterTool; no adapter claims a full live loop",
-  "clean_build_method": "allowlist copy with per-file hash verification"
+  "verification_summary": "Automated regression coverage for core, hooks, setup and OpenCode parts. The limited 0.2.0 live capability evidence remains documented in README; no full live loop is claimed for any adapter in 0.2.1.",
+  "clean_build_method": "Tracked source files with exact-byte MANIFEST.txt; the manifest excludes itself. No rebuilt distribution ZIP is claimed by this source revision."
 }

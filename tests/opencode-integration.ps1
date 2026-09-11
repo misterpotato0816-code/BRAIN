@@ -297,7 +297,7 @@ const plugin = await BrainPlugin({ client, directory: projectA });
 const session = "node-harness-001";
 // session.created caches context; chat.message appends it exactly once.
 await plugin.event({ event: { type: "session.created", properties: { sessionID: session } } });
-const out1 = { parts: [] };
+const out1 = { message: { id: "msg_first" }, parts: [] };
 await plugin["chat.message"]({ sessionID: session }, out1);
 if (out1.parts.length !== 1 || !String(out1.parts[0].text).includes("Alpha OpenCode seed marker")) {
   console.error("FAIL: first chat.message must carry project A context");
@@ -305,18 +305,35 @@ if (out1.parts.length !== 1 || !String(out1.parts[0].text).includes("Alpha OpenC
   console.error("DEBUG parts=" + out1.parts.length);
   process.exit(1);
 }
-const out2 = { parts: [] };
+const part1 = out1.parts[0];
+if (!/^prt_[0-9a-f]{32}$/.test(part1.id) || part1.sessionID !== session || part1.messageID !== out1.message.id || part1.synthetic !== true) {
+  throw new Error("Injected context must be a complete synthetic TextPart belonging to this message/session.");
+}
+const out2 = { message: { id: "msg_second" }, parts: [] };
 await plugin["chat.message"]({ sessionID: session }, out2);
 if (out2.parts.length !== 0) {
   console.error("FAIL: context must be appended exactly once");
   process.exit(1);
 }
 // Resumed session (no session.created): lazy start must still inject.
-const out3 = { parts: [] };
+const out3 = { message: { id: "msg_resume" }, parts: [] };
 await plugin["chat.message"]({ sessionID: "node-harness-resume" }, out3);
 if (out3.parts.length !== 1 || !String(out3.parts[0].text).includes("Alpha OpenCode seed marker")) {
   console.error("FAIL: resumed session must get context via lazy start");
   process.exit(1);
+}
+const part3 = out3.parts[0];
+if (part3.id === part1.id || !/^prt_[0-9a-f]{32}$/.test(part3.id) || part3.sessionID !== "node-harness-resume" || part3.messageID !== out3.message.id) {
+  throw new Error("Resumed sessions must receive distinct IDs with the correct message/session ownership.");
+}
+// Missing message metadata must fail open without consuming the pending context.
+const incomplete = { parts: [] };
+await plugin["chat.message"]({ sessionID: "node-harness-missing-message" }, incomplete);
+if (incomplete.parts.length !== 0) throw new Error("Do not append an invalid TextPart without a message ID.");
+const retry = { message: { id: "msg_retry" }, parts: [] };
+await plugin["chat.message"]({ sessionID: "node-harness-missing-message" }, retry);
+if (retry.parts.length !== 1 || retry.parts[0].messageID !== "msg_retry") {
+  throw new Error("A failed append must preserve pending context for the next valid message.");
 }
 // Dirty work then idle: record request pre-filled, never submitted.
 await plugin["tool.execute.after"]({ sessionID: session, tool: "edit", callID: "c1", args: {} });
